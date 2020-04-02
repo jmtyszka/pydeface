@@ -49,7 +49,8 @@ if __name__ == "__main__":
 
     datafiles = {'pydeface': ['data/facemask.nii.gz','data/T1w_template.nii.gz', 'ident.mat']}
 
-    setup(name=DISTNAME,
+    setup(
+        name=DISTNAME,
         maintainer=MAINTAINER,
         maintainer_email=MAINTAINER_EMAIL,
         description=DESCRIPTION,
@@ -66,4 +67,6 @@ if __name__ == "__main__":
                      'Operating System :: POSIX',
                      'Operating System :: Unix',
                      'Operating System :: MacOS'],
+        install_requires=['nipype',
+                          'numpy'],
     )
