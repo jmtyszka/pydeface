@@ -1,0 +1,11 @@
+MANIFEST.in
+README.md
+setup.py
+pydeface.egg-info/PKG-INFO
+pydeface.egg-info/SOURCES.txt
+pydeface.egg-info/dependency_links.txt
+pydeface.egg-info/requires.txt
+pydeface.egg-info/top_level.txt
+pydeface/data/ConteCore2_50_T1w_2mm.nii.gz
+pydeface/data/ConteCore2_50_T1w_2mm_deface_mask.nii.gz
+scripts/pydeface.py

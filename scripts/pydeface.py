@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
-deface an image using FSL
-USAGE:  deface -i <filename to deface> -o [output filename]
+Russ Poldrack's pydeface modified to perform non-invertable face voxelation
+- Retains deidentified signal in face area for more stable registration
+- Optional export of registered face mask
+- Optional import and application of previously calculated face mask
+
+AUTHOR : Mike Tyszka, Ph.D.
+PLACE  : Caltech Brain Imaging Center
+
+Original Copyright:
 
 ## Copyright 2011, Russell Poldrack. All rights reserved.
 
@@ -32,8 +39,8 @@ import sys
 import tempfile
 import subprocess
 import argparse
-import nibabel as nib
 import shutil
+import nibabel as nib
 from scipy import ndimage as nd
 from nipype.interfaces import fsl
 from pkg_resources import resource_filename, Requirement
@@ -56,18 +63,18 @@ def run_shell_cmd(cmd, cwd=[]):
 def main():
 
     # T1w template and face mask locations
-    T1w_template = resource_filename(Requirement.parse("pydeface"), 'pydeface/data/T1w_template.nii.gz')
-    facemask = resource_filename(Requirement.parse("pydeface"), "pydeface/data/facemask.nii.gz")
+    T1w_template = resource_filename(Requirement.parse("pydeface"), "pydeface/data/ConteCore2_50_T1w_2mm.nii.gz")
+    facemask = resource_filename(Requirement.parse("pydeface"), "pydeface/data/ConteCore2_50_T1w_2mm_deface_mask.nii.gz")
 
     try:
         assert os.path.exists(T1w_template)
     except:
-        raise Exception('*** Missing template : %s'%T1w_template)
+        raise Exception('*** Missing template {}'.format(T1w_template))
 
     try:
         assert os.path.exists(facemask)
     except:
-        raise Exception('*** Missing facemask : %s'%facemask)
+        raise Exception('*** Missing facemask {}'.format(facemask))
 
     # Check that FSLDIR is set
     if 'FSLDIR' in os.environ:
@@ -84,8 +91,12 @@ def main():
                         help='Defaced output image [<infile>_defaced.<ext>]')
     parser.add_argument('-s', '--scalefactor', required=False,
                         help='Voxelation scale factor [8.0]')
-    parser.add_argument('-r', '--replace', action='store_true', default=False,
-                        help='Deface image in place and backup original [False]')
+    parser.add_argument('-im', '--inmask', required= False,
+                        help='Use this Nifti face mask to perform defacing')
+    parser.add_argument('-om', '--outmask', required= False,
+                        help='Save registered face mask to this Nifti file')
+    parser.add_argument('-r', '--replace', required=False, default=False, action='store_true',
+                        help='Backup original image and replace with defaced version')
 
     # Parse command line arguments
     args = parser.parse_args()
@@ -95,18 +106,15 @@ def main():
 
     # Save full image extension
     # Handle double-extension for compressed Nifti files
-    if in_fname.endswith('.nii.gz'):
-        img_ext = '.nii.gz'
-    else:
-        in_stub, img_ext = os.path.splitext(in_fname)
+    if not in_fname.endswith('.nii.gz'):
+        print('* pydeface currently only supports .nii.gz images - exiting')
+        sys.exit(1)
 
     # Output defaced image filename
     if args.outfile:
         out_fname = args.outfile
     else:
-        out_fname = in_fname.replace(img_ext, '_defaced' + img_ext)
-
-    #
+        out_fname = in_fname.replace('.nii.gz', '_defaced.nii.gz')
 
     # Protect existing output file
     if os.path.isfile(out_fname):
@@ -134,27 +142,6 @@ def main():
 
     print('Defacing {}'.format(in_fname))
 
-    # Register template to infile
-    print('Registering template to individual space')
-    flirt = fsl.FLIRT()
-    flirt.inputs.cost_func='mutualinfo'
-    flirt.inputs.in_file = T1w_template
-    flirt.inputs.out_matrix_file = tmp_temp2ind_mat_fname
-    flirt.inputs.reference = in_fname
-    flirt.inputs.out_file = tmp_img_fname
-    flirt.run()
-
-    # Affine transform facemask to infile
-    print('Resampling face mask to individual space')
-    flirt = fsl.FLIRT()
-    flirt.inputs.in_file = facemask
-    flirt.inputs.in_matrix_file = tmp_temp2ind_mat_fname
-    flirt.inputs.apply_xfm = True
-    flirt.inputs.reference = in_fname
-    flirt.inputs.out_file = tmp_indmask_fname
-    flirt.inputs.out_matrix_file = tmp_mat_fname
-    flirt.run()
-
     # Load input image
     print('Loading {}'.format(in_fname))
     in_nii = nib.load(in_fname)
@@ -171,9 +158,45 @@ def main():
     print('  Nearest neighbor upsampling')
     in_vox_img = nd.interpolation.zoom(in_vox_img, zoom=vox_sf, order=0)
 
-    # Load individual space face mask
-    indmask_nii = nib.load(tmp_indmask_fname)
-    indmask_img = indmask_nii.get_data()
+    if args.inmask:
+
+        # Load precalculated individual space face mask
+        indmask_nii = nib.load(args.inmask)
+        indmask_img = indmask_nii.get_data()
+
+    else:
+
+        # Register template to infile
+        print('Registering template to individual space')
+        flirt = fsl.FLIRT()
+        flirt.inputs.cost_func='mutualinfo'
+        flirt.inputs.in_file = T1w_template
+        flirt.inputs.out_matrix_file = tmp_temp2ind_mat_fname
+        flirt.inputs.reference = in_fname
+        flirt.inputs.out_file = tmp_img_fname
+        flirt.run()
+
+        # Affine transform facemask to infile
+        print('Resampling face mask to individual space')
+        flirt = fsl.FLIRT()
+        flirt.inputs.in_file = facemask
+        flirt.inputs.in_matrix_file = tmp_temp2ind_mat_fname
+        flirt.inputs.apply_xfm = True
+        flirt.inputs.reference = in_fname
+        flirt.inputs.out_file = tmp_indmask_fname
+        flirt.inputs.out_matrix_file = tmp_mat_fname
+        flirt.run()
+
+        # Load computed individual space face mask
+        indmask_nii = nib.load(tmp_indmask_fname)
+        indmask_img = indmask_nii.get_data()
+
+        # Cleanup temporary files
+        print('Cleaning up temporary files')
+        os.remove(tmp_temp2ind_mat_fname)
+        os.remove(tmp_indmask_fname)
+        os.remove(tmp_img_fname)
+        os.remove(tmp_mat_fname)
 
     # Replace face area with voxelated version
     # Note that the face mask is 0 in the face region, 1 elsewhere.
@@ -182,56 +205,24 @@ def main():
 
     # Save defaced image
     print('Saving defaced image to {}'.format(out_fname))
+    defaced_nii = nib.Nifti1Image(out_img, in_nii.get_affine(), in_nii.get_header())
+    defaced_nii.to_filename(out_fname)
 
-    if '.nii' in out_fname:
-        outfile_obj = nib.Nifti1Image(out_img, in_nii.get_affine(), in_nii.get_header())
-    elif '.mgz' in out_fname:
-        outfile_obj = nib.MincImage(out_img, in_nii.get_affine(), in_nii.get_header())
-    else:
-        print('* Unknown output format extension {} - exiting'.format(img_ext))
-        sys.exit(1)
-
-    # Export defaced voxelated image. Output format handled by nibabel
-    outfile_obj.to_filename(out_fname)
-
-    # Handle replacement with backup option
+    # Backup and replace original if requested
     if args.replace:
 
-        out_fname = in_fname
+        bak_fname = in_fname.replace('.nii.gz', '_bak.nii.gz')
 
-        # Backup original image
-        bak_fname = in_fname.replace(img_ext, '_faced' + img_ext)
-        print('Backup faced image   : {}'.format(bak_fname))
+        print('Backup up {} to {}'.format(in_fname, bak_fname))
+        shutil.move(in_fname, bak_fname)
 
-        # Backup original
-        try:
-            shutil.move(in_fname, bak_fname)
-        except IOError as e:
-            print('I/O error({0}): {1}'.format(e.errno, e.strerror))
-            print('Could not backup original image - exiting')
-            sys.exit(1)
+        print('Renaming {} to {}'.format(out_fname, in_fname))
+        shutil.move(out_fname, in_fname)
 
-        # Replace original with defaced version
-        try:
-            shutil.move(out_fname, in_fname)
-        except IOError as e:
-            print('I/O error({0}): {1}'.format(e.errno, e.strerror))
-            print('Could not backup original image - exiting')
-            sys.exit(1)
-
-    # Cleanup temporary files
-    print('Cleaning up')
-    os.remove(tmp_nii_fname)
-    os.remove(tmp_temp2ind_mat_fname)
-    os.remove(tmp_indmask_fname)
-    os.remove(tmp_img_fname)
-    os.remove(tmp_mat_fname)
-
-
-def mgz2niigz(mgz_fname, niigz_fname):
-
-    mgz_obj = nib.load(mgz_fname)
-    mgz_obj.to_filename(niigz_fname)
+    # Save mask if requested
+    if args.outmask:
+        print('Saving registered face mask to {}'.format(args.outmask))
+        indmask_nii.to_filename(args.outmask)
 
 
 if __name__ == "__main__":

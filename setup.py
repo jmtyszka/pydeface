@@ -4,7 +4,7 @@
 # some portions borrowed from https://github.com/mwaskom/lyman/blob/master/setup.py
 
 
-descr = """pydeface: a script to remove facial structure from MRI images"""
+descr = """pydeface: deidentify structural MRI data by voxelizing the face"""
 
 import os
 from setuptools import setup
@@ -12,12 +12,12 @@ import glob
 
 DISTNAME="pydeface"
 DESCRIPTION=descr
-MAINTAINER='Russ Poldrack'
-MAINTAINER_EMAIL='poldrack@stanford.edu'
+MAINTAINER='Mike Tyszka'
+MAINTAINER_EMAIL='jmt@caltech.edu'
 LICENSE='MIT'
-URL='http://poldracklab.org'
-DOWNLOAD_URL='https://github.com/poldracklab/pydeface/'
-VERSION='1.1'
+URL='http://evendim.sites.caltech.edu'
+DOWNLOAD_URL='https://github.com/jmtyszka/pydeface/'
+VERSION='2020.4.3'
 
 def check_dependencies():
 
@@ -47,7 +47,9 @@ if __name__ == "__main__":
                             'clean'))):
         check_dependencies()
 
-    datafiles = {'pydeface': ['data/facemask.nii.gz','data/T1w_template.nii.gz', 'ident.mat']}
+    datafiles = {'pydeface': ['data/ConteCore2_50_T1w_2mm.nii.gz',
+                              'data/ConteCore2_50_T1w_2mm_deface_mask.nii.gz',
+                              'ident.mat']}
 
     setup(
         name=DISTNAME,
