@@ -97,6 +97,8 @@ def main():
                         help='Save registered face mask to this Nifti file')
     parser.add_argument('-r', '--replace', required=False, default=False, action='store_true',
                         help='Backup original image and replace with defaced version')
+    parser.add_argument('--overwrite', required=False, default=False, action='store_true',
+                        help='Overwrite existing defaced output')
 
     # Parse command line arguments
     args = parser.parse_args()
@@ -117,7 +119,7 @@ def main():
         out_fname = in_fname.replace('.nii.gz', '_defaced.nii.gz')
 
     # Protect existing output file
-    if os.path.isfile(out_fname):
+    if os.path.isfile(out_fname) and not args.overwrite:
         print('{} already exists - remove it first'.format(out_fname))
         sys.exit(1)
 
@@ -127,18 +129,6 @@ def main():
         vox_sf = float(args.scalefactor)
     else:
         vox_sf = 8.0
-
-    # Temporary template to individual affine transform matrix
-    _, tmp_temp2ind_mat_fname = tempfile.mkstemp()
-    tmp_temp2ind_mat_fname += '.mat'
-
-    # Temporary face mask in individual space
-    _, tmp_indmask_fname = tempfile.mkstemp()
-    tmp_indmask_fname += '.nii.gz'
-
-    # Temporary registration output results
-    _, tmp_img_fname = tempfile.mkstemp()
-    _, tmp_mat_fname = tempfile.mkstemp()
 
     print('Defacing {}'.format(in_fname))
 
@@ -161,47 +151,50 @@ def main():
     if args.inmask:
 
         # Load precalculated individual space face mask
-        indmask_nii = nib.load(args.inmask)
-        indmask_img = indmask_nii.get_data()
+        ind_deface_mask_nii = nib.load(args.inmask)
+        ind_deface_mask_img = ind_deface_mask_nii.get_data()
 
     else:
+
+        # Create temporary directory for FLIRT outputs
+        tmp_dir_obj = tempfile.TemporaryDirectory()
+        tmp_dir = tmp_dir_obj.name
+        flirt_tx = os.path.join(tmp_dir, 'flirt_tx.mat')
+        dummy_mat = os.path.join(tmp_dir, 'dummy.mat')
+        dummy_img = os.path.join(tmp_dir, 'dummy.nii.gz')
+        deface_mask_fname = os.path.join(tmp_dir, 'deface_mask.nii.gz')
 
         # Register template to infile
         print('Registering template to individual space')
         flirt = fsl.FLIRT()
         flirt.inputs.cost_func='mutualinfo'
         flirt.inputs.in_file = T1w_template
-        flirt.inputs.out_matrix_file = tmp_temp2ind_mat_fname
+        flirt.inputs.out_matrix_file = flirt_tx
         flirt.inputs.reference = in_fname
-        flirt.inputs.out_file = tmp_img_fname
+        flirt.inputs.out_file = dummy_img
+        flirt.terminal_output='none'
         flirt.run()
 
         # Affine transform facemask to infile
         print('Resampling face mask to individual space')
         flirt = fsl.FLIRT()
         flirt.inputs.in_file = facemask
-        flirt.inputs.in_matrix_file = tmp_temp2ind_mat_fname
+        flirt.inputs.in_matrix_file = flirt_tx
         flirt.inputs.apply_xfm = True
         flirt.inputs.reference = in_fname
-        flirt.inputs.out_file = tmp_indmask_fname
-        flirt.inputs.out_matrix_file = tmp_mat_fname
+        flirt.inputs.out_file = deface_mask_fname
+        flirt.inputs.out_matrix_file = dummy_mat
+        flirt.terminal_output='none'
         flirt.run()
 
-        # Load computed individual space face mask
-        indmask_nii = nib.load(tmp_indmask_fname)
-        indmask_img = indmask_nii.get_data()
-
-        # Cleanup temporary files
-        print('Cleaning up temporary files')
-        os.remove(tmp_temp2ind_mat_fname)
-        os.remove(tmp_indmask_fname)
-        os.remove(tmp_img_fname)
-        os.remove(tmp_mat_fname)
+        # Load computed individual space deface mask
+        ind_deface_mask_nii = nib.load(deface_mask_fname)
+        ind_deface_mask_img = ind_deface_mask_nii.get_data()
 
     # Replace face area with voxelated version
     # Note that the face mask is 0 in the face region, 1 elsewhere.
     print('Anonymizing face area')
-    out_img = in_img * indmask_img + in_vox_img * (1 - indmask_img)
+    out_img = in_img * ind_deface_mask_img + in_vox_img * (1 - ind_deface_mask_img)
 
     # Save defaced image
     print('Saving defaced image to {}'.format(out_fname))
@@ -222,7 +215,7 @@ def main():
     # Save mask if requested
     if args.outmask:
         print('Saving registered face mask to {}'.format(args.outmask))
-        indmask_nii.to_filename(args.outmask)
+        ind_deface_mask_nii.to_filename(args.outmask)
 
 
 if __name__ == "__main__":
