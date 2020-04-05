@@ -1,16 +1,17 @@
-Defacing tool for nifti images.  
+Adaptation of Russ Poldrack's pydeface tool replacing zeroing of face region with irreversible face voxelation.
 
-Requirements:
-- FSL
+### Requirements
+- FSL 5x
 - nibabel
 - nipype
 
-#### To install:
+### Installation
 
-* git clone https://github.com/poldracklab/pydeface.git
+* git clone https://github.com/jmtyszka/pydeface.git
 * cd pydeface
-* python setup.py install
+* sudo python setup.py install
 
-#### To use:
+### Usage
 
-pydeface.py infile.nii.gz
+pydeface.py -i faced_image.nii.gz
+pydeface.py -h
