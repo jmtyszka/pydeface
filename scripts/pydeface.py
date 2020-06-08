@@ -135,7 +135,7 @@ def main():
     # Load input image
     print('Loading {}'.format(in_fname))
     in_nii = nib.load(in_fname)
-    in_img = in_nii.get_data()
+    in_img = in_nii.get_fdata()
 
     # Voxelate input image
     # 1. Cubic downsample
@@ -152,7 +152,7 @@ def main():
 
         # Load precalculated individual space face mask
         ind_deface_mask_nii = nib.load(args.inmask)
-        ind_deface_mask_img = ind_deface_mask_nii.get_data()
+        ind_deface_mask_img = ind_deface_mask_nii.get_fdata()
 
     else:
 
@@ -189,7 +189,7 @@ def main():
 
         # Load computed individual space deface mask
         ind_deface_mask_nii = nib.load(deface_mask_fname)
-        ind_deface_mask_img = ind_deface_mask_nii.get_data()
+        ind_deface_mask_img = ind_deface_mask_nii.get_fdata()
 
     # Replace face area with voxelated version
     # Note that the face mask is 0 in the face region, 1 elsewhere.
